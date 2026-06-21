@@ -7,7 +7,6 @@ import { useAppState } from '../../store/AppContext';
 interface BlackoutEntry { date: string; type: BlackoutDate['type'] }
 interface RobotEntry { date: string; assistingOnly: boolean }
 
-const MAX_POOL_DATES = 6;
 
 interface Props {
   initialSurgeon?: Surgeon;
@@ -251,26 +250,24 @@ export function ManualEntryForm({ initialSurgeon, onSaved }: Props) {
         </div>
       )}
 
-      {/* POOL: available dates (up to 6, each becomes OCN) */}
+      {/* POOL: available dates (each becomes OCN) */}
       {type === 'POOL' && (
         <div>
           <div className="flex items-center justify-between mb-1">
             <div>
               <label className="text-xs font-medium text-slate-600">Available Dates</label>
-              <span className="ml-1 text-xs text-slate-400">({availableDates.length}/{MAX_POOL_DATES}) — each becomes an OCN shift</span>
+              <span className="ml-1 text-xs text-slate-400">({availableDates.length}) — each becomes an OCN shift</span>
             </div>
-            {availableDates.length < MAX_POOL_DATES && (
-              <button
-                type="button"
-                onClick={() => setAvailableDates(prev => [...prev, ''])}
-                className="text-xs text-blue-500 hover:underline"
-              >
-                + Add date
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setAvailableDates(prev => [...prev, ''])}
+              className="text-xs text-blue-500 hover:underline"
+            >
+              + Add date
+            </button>
           </div>
           {availableDates.length === 0 && (
-            <p className="text-xs text-slate-400">No dates entered. Add up to 6 dates when this surgeon is available.</p>
+            <p className="text-xs text-slate-400">No dates entered. Add dates when this surgeon is available.</p>
           )}
           {availableDates.map((d, i) => (
             <div key={i} className="flex gap-2 mb-1">
