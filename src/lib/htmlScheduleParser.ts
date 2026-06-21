@@ -371,9 +371,28 @@ export function parseKpBlockScheduleCsv(csv: string): HtmlParseResult {
     const row = rawData[r];
     const firstCell = row[0]?.trim() ?? '';
 
-    if (firstCell && /\(.+\)/.test(firstCell)) {
+    if (/^schedule notes/i.test(firstCell)) break;
+
+    // Two KP CSV formats:
+    //   Format A: "Chen (CHEN-1032217)" — name + ID in parens (older export)
+    //   Format B: "CHEN-1032217"        — bare ID only (newer export)
+    const hasParenId = /\(.+\)/.test(firstCell);
+    const lastHyphen = firstCell.lastIndexOf('-');
+    const hasHyphenId =
+      firstCell.length > 0 &&
+      !/^\d/.test(firstCell) &&
+      lastHyphen > 0 &&
+      /^\d{5,}$/.test(firstCell.slice(lastHyphen + 1).trim());
+
+    if (hasParenId || hasHyphenId) {
       flushSurgeon();
-      const name = normalizeSurgeonName(firstCell);
+      let name: string;
+      if (hasParenId) {
+        name = normalizeSurgeonName(firstCell);
+      } else {
+        const lastName = firstCell.slice(0, lastHyphen).trim();
+        name = lastName.charAt(0).toUpperCase() + lastName.slice(1).toLowerCase();
+      }
       if (name.toLowerCase().startsWith('pool')) { currentName = null; continue; }
       currentName = name;
     }
