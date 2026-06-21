@@ -111,6 +111,11 @@ export function HtmlImporter({ onDone }: { onDone?: () => void } = {}) {
       return;
     }
 
+    // Navigate to the imported date range
+    if (dateRange) {
+      dispatch({ type: 'SET_RANGE', payload: { start: dateRange.start, end: dateRange.end } });
+    }
+
     // Store raw KP CSV so Export CSV can reproduce the original format
     if (preview.isKpCsv) {
       dispatch({ type: 'SET_RAW_SCHEDULE_FILE', payload: preview.rawContent });
