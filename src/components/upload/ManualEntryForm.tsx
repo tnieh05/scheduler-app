@@ -253,21 +253,21 @@ export function ManualEntryForm({ initialSurgeon, onSaved }: Props) {
       {/* POOL: available dates (each becomes OCN) */}
       {type === 'POOL' && (
         <div>
-          <div className="flex items-center justify-between mb-1">
-            <div>
-              <label className="text-xs font-medium text-slate-600">Available Dates</label>
-              <span className="ml-1 text-xs text-slate-400">({availableDates.length}) — each becomes an OCN shift</span>
+          <div className="mb-1">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-slate-600">Available Dates ({availableDates.length})</label>
+              <button
+                type="button"
+                onClick={() => setAvailableDates(prev => [...prev, ''])}
+                className="text-xs text-blue-500 hover:underline whitespace-nowrap"
+              >
+                + Add date
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setAvailableDates(prev => [...prev, ''])}
-              className="text-xs text-blue-500 hover:underline"
-            >
-              + Add date
-            </button>
+            <p className="text-xs text-slate-400">Each becomes an OCN shift</p>
           </div>
           {availableDates.length === 0 && (
-            <p className="text-xs text-slate-400">No dates entered. Add dates when this surgeon is available.</p>
+            <p className="text-xs text-slate-400 mt-2">No dates entered. Add dates when this surgeon is available.</p>
           )}
           {availableDates.map((d, i) => (
             <div key={i} className="flex gap-2 mb-1">
