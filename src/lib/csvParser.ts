@@ -41,6 +41,9 @@ function parsePreferences(row: CSVSurgeonRow): SurgeonPreferences {
   return {
     shiftPreference,
     customNotes: row.custom_preferences?.trim() ?? '',
+    maxOcd: null,
+    maxOcn: null,
+    max24h: null,
   };
 }
 
