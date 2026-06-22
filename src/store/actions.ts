@@ -24,4 +24,5 @@ export type Action =
   | { type: 'SELECT_SURGEON'; payload: string | null }
   | { type: 'TOGGLE_PIN_SHIFT'; payload: { shiftId: string } }
   | { type: 'SET_RAW_SCHEDULE_FILE'; payload: string | null }
-  | { type: 'LOAD_SAVED_SCHEDULE'; payload: SavedSchedule };
+  | { type: 'LOAD_SAVED_SCHEDULE'; payload: SavedSchedule }
+  | { type: 'MERGE_IMPORTED_RANGE'; payload: DateRange };

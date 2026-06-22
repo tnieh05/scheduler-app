@@ -111,12 +111,9 @@ export function HtmlImporter({ onDone }: { onDone?: () => void } = {}) {
       return;
     }
 
-    // Expand the selected range to include the imported file's date range
+    // Expand the cumulative imported range to include this file's dates
     if (dateRange) {
-      const current = state.selectedRange;
-      const newStart = current.start < dateRange.start ? current.start : dateRange.start;
-      const newEnd = current.end > dateRange.end ? current.end : dateRange.end;
-      dispatch({ type: 'SET_RANGE', payload: { start: newStart, end: newEnd } });
+      dispatch({ type: 'MERGE_IMPORTED_RANGE', payload: dateRange });
     }
 
     // Store raw KP CSV so Export CSV can reproduce the original format

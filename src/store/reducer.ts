@@ -22,6 +22,7 @@ export interface AppState {
   parseErrors: string[];
   activeMonth: string; // "YYYY-MM" — currently viewed month
   rawScheduleFile: string | null; // raw KP block CSV text, used as export template
+  importedRange: DateRange | null; // cumulative range across all imported files
 }
 
 function defaultRange(): DateRange {
@@ -73,6 +74,7 @@ export const initialState: AppState = {
   parseErrors: [],
   activeMonth: defaultMonth(),
   rawScheduleFile: null,
+  importedRange: null,
 };
 
 function revalidate(schedule: Schedule, surgeons: Surgeon[], hasGenerated: boolean): Violation[] {
@@ -267,6 +269,23 @@ export function reducer(state: AppState, action: Action): AppState {
         violations: [],
       };
 
+    case 'MERGE_IMPORTED_RANGE': {
+      const incoming = action.payload;
+      const prior = state.importedRange;
+      const merged: DateRange = prior
+        ? {
+            start: prior.start < incoming.start ? prior.start : incoming.start,
+            end: prior.end > incoming.end ? prior.end : incoming.end,
+          }
+        : incoming;
+      return {
+        ...state,
+        importedRange: merged,
+        selectedRange: merged,
+        activeMonth: incoming.start.slice(0, 7),
+      };
+    }
+
     case 'CLEAR_SCHEDULE': {
       const surgeons = state.surgeons.map(s => ({
         ...s,
@@ -277,7 +296,7 @@ export function reducer(state: AppState, action: Action): AppState {
       const schedule = state.schedule
         ? { ...state.schedule, shifts: [] }
         : { range: state.selectedRange, shifts: [] };
-      return { ...state, surgeons, schedule, violations: [], hasGenerated: false, selectedSurgeonId: null };
+      return { ...state, surgeons, schedule, violations: [], hasGenerated: false, selectedSurgeonId: null, importedRange: null };
     }
 
     case 'SELECT_SURGEON':
