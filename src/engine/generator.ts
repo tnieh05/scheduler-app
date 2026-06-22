@@ -168,6 +168,31 @@ function hasShiftOnDate(shifts: Shift[], surgeonId: string, date: string): boole
   return shifts.some(s => s.surgeonId === surgeonId && s.date === date);
 }
 
+// Returns true when the surgeon has already reached their per-preference monthly cap
+// for the given shift kind. null means no cap.
+// 24H shifts are counted independently — they do not contribute to maxOcd or maxOcn.
+function atMaxLimit(
+  surgeon: Surgeon,
+  kind: 'OCD' | 'OCN' | '24H',
+  shifts: Shift[],
+  year: number,
+  month: number,
+): boolean {
+  const max =
+    kind === 'OCD' ? surgeon.preferences.maxOcd :
+    kind === 'OCN' ? surgeon.preferences.maxOcn :
+    surgeon.preferences.max24h;
+  if (max == null) return false;
+  const count = shifts.filter(
+    s =>
+      s.surgeonId === surgeon.id &&
+      isoYear(s.date) === year &&
+      isoMonth(s.date) === month &&
+      s.kind === kind,
+  ).length;
+  return count >= max;
+}
+
 function robotBlocksOCD(surgeon: Surgeon, date: string): boolean {
   const tomorrow = addDays(date, 1);
   return surgeon.robotBlocks.some(r => r.date === tomorrow && !r.assistingOnly);
@@ -253,17 +278,24 @@ function canAssign(
   if (inRestWindowAfter(shifts, surgeon.id, date)) return false;
   if (weekCallCount(shifts, surgeon.id, date) >= 2) return false;
   if (!weekendEligible(shifts, surgeon.id, date, year, month)) return false;
+  const pref = surgeon.preferences.shiftPreference;
   if (kind === 'OCD') {
+    if (pref === '24H_ONLY') return false;
+    if (atMaxLimit(surgeon, 'OCD', shifts, year, month)) return false;
     if (hasBlackout(surgeon, date, 'OCD')) return false;
     if (robotBlocksOCD(surgeon, date)) return false;
     if (robotBlocksOnDate(surgeon, date, 'OCD')) return false;
     if (wouldViolateOCDRestWindow(shifts, surgeon.id, date)) return false;
   } else if (kind === 'OCN') {
+    if (pref === '24H_ONLY') return false;
+    if (atMaxLimit(surgeon, 'OCN', shifts, year, month)) return false;
     if (hasBlackout(surgeon, date, 'OCN')) return false;
     if (robotBlocksOCN(surgeon, date)) return false;
     if (robotBlocksOnDate(surgeon, date, 'OCN')) return false;
     if (wouldViolateRestWindow(shifts, surgeon.id, date)) return false;
   } else {
+    if (pref === '12H_ONLY') return false;
+    if (atMaxLimit(surgeon, '24H', shifts, year, month)) return false;
     if (hasBlackout(surgeon, date, 'OCD') || hasBlackout(surgeon, date, 'OCN')) return false;
     if (robotBlocksOCN(surgeon, date)) return false;
     if (robotBlocksOnDate(surgeon, date, '24H')) return false;
@@ -454,6 +486,13 @@ export function generateSchedule(
   range: DateRange,
   existingSchedule?: Schedule,
 ): Schedule {
+  console.log('[Generator] preferences snapshot:');
+  surgeons.forEach(s => {
+    const p = s.preferences;
+    if (p.shiftPreference !== 'none' || p.max24h != null || p.maxOcd != null || p.maxOcn != null) {
+      console.log(`  ${s.name}: pref=${p.shiftPreference} max24h=${p.max24h} maxOcd=${p.maxOcd} maxOcn=${p.maxOcn}`);
+    }
+  });
   const poolSurgeons = surgeons.filter(s => s.type === 'POOL');
   const activeSurgeons = surgeons.filter(s => s.type !== 'POOL');
 
@@ -537,13 +576,31 @@ export function generateSchedule(
       ...monthDates.filter(d => !isWeekend(d)),
     ];
     for (const date of phase2Dates) {
-      // Skip dates already covered by 24H, or where pool provides OCN (only OCD needed there)
+      // Skip dates already covered by 24H.
       if (shifts.some(s => s.date === date && s.kind === '24H')) continue;
-      if (shifts.some(s => s.date === date && s.kind === 'OCN' && poolIdSet.has(s.surgeonId))) continue;
+
+      // On dates where the pool surgeon covers OCN, we normally skip Phase 2
+      // (pool + OCD from Phase 4 is sufficient). Exception: if a 24H_ONLY surgeon
+      // still needs 24H shifts, allow them to take this slot. Their 24H replaces
+      // both OCD and OCN, so the pool's OCN becomes redundant and is removed.
+      const poolOCNIndex = shifts.findIndex(
+        s => s.date === date && s.kind === 'OCN' && poolIdSet.has(s.surgeonId),
+      );
+      const hasPoolOCN = poolOCNIndex !== -1;
 
       const candidates = activeSurgeons.slice().sort((a, b) => {
         const qa = getQuota(quotas, a.id, year, month);
         const qb = getQuota(quotas, b.id, year, month);
+        // 24H_ONLY surgeons below their max have no other call path (Phases 3/4
+        // assign OCD/OCN which they cannot receive). They must be served by
+        // Phase 2 exclusively, so give them priority over regular surgeons.
+        const aNeedsOnly =
+          a.preferences.shiftPreference === '24H_ONLY' &&
+          !atMaxLimit(a, '24H', shifts, year, month);
+        const bNeedsOnly =
+          b.preferences.shiftPreference === '24H_ONLY' &&
+          !atMaxLimit(b, '24H', shifts, year, month);
+        if (aNeedsOnly !== bNeedsOnly) return aNeedsOnly ? -1 : 1;
         const remA = Math.max(1, (eligibleDatesMap.get(a.id) ?? []).filter(d => d >= date).length);
         const remB = Math.max(1, (eligibleDatesMap.get(b.id) ?? []).filter(d => d >= date).length);
         const urgencyA = (TARGET_CALLS_PER_MONTH - totalCallCount(qa)) / remA;
@@ -566,10 +623,15 @@ export function generateSchedule(
 
       const eligible24H = (surgeon: Surgeon, respectHalfRule: boolean): boolean => {
         const q = getQuota(quotas, surgeon.id, year, month);
-        if (q.h24 >= SHIFT_QUOTAS[surgeon.type].h24) return false;
+        const pref = surgeon.preferences.shiftPreference;
+        if (pref === '12H_ONLY') return false;
+        if (atMaxLimit(surgeon, '24H', shifts, year, month)) return false;
         if (respectHalfRule && q.h24 >= 1 && isFirstHalf) return false;
-        if (q.ocd >= SHIFT_QUOTAS[surgeon.type].ocd) return false;
-        if (q.ocn >= SHIFT_QUOTAS[surgeon.type].ocn) return false;
+        const hasExplicitMax = surgeon.preferences.max24h != null;
+        if (pref !== '24H_ONLY' && !hasExplicitMax) {
+          if (q.ocd >= SHIFT_QUOTAS[surgeon.type].ocd) return false;
+          if (q.ocn >= SHIFT_QUOTAS[surgeon.type].ocn) return false;
+        }
         if (hasBlackout(surgeon, date, 'OCD') || hasBlackout(surgeon, date, 'OCN')) return false;
         if (inRestWindowAfter(shifts, surgeon.id, date)) return false;
         if (wouldViolateRestWindow(shifts, surgeon.id, date)) return false;
@@ -582,10 +644,28 @@ export function generateSchedule(
         return true;
       };
 
-      let picked = candidates.find(s => eligible24H(s, true));
-      if (!picked) picked = candidates.find(s => eligible24H(s, false));
+      // For pool-covered dates: only 24H_ONLY surgeons below their max24h may
+      // override the pool. All others are adequately served by pool OCN + Phase 4 OCD.
+      const only24HNeeding = (s: Surgeon) =>
+        s.preferences.shiftPreference === '24H_ONLY' &&
+        !atMaxLimit(s, '24H', shifts, year, month);
+
+      let picked: Surgeon | undefined;
+      if (hasPoolOCN) {
+        const pool24HCandidates = candidates.filter(only24HNeeding);
+        if (pool24HCandidates.length === 0) continue;
+        picked = pool24HCandidates.find(s => eligible24H(s, true));
+        if (!picked) picked = pool24HCandidates.find(s => eligible24H(s, false));
+      } else {
+        picked = candidates.find(s => eligible24H(s, true));
+        if (!picked) picked = candidates.find(s => eligible24H(s, false));
+      }
 
       if (picked) {
+        if (hasPoolOCN) {
+          // Remove the pool's OCN — the 24H shift covers both OCD and OCN slots.
+          shifts.splice(poolOCNIndex, 1);
+        }
         const q = getQuota(quotas, picked.id, year, month);
         shifts.push(makeShift(picked.id, date, '24H', undefined, ['POSTCALL_AM', 'POSTCALL_PM']));
         q.h24++;
@@ -604,7 +684,9 @@ export function generateSchedule(
 
       for (const surgeon of candidates) {
         const q = getQuota(quotas, surgeon.id, year, month);
+        if (surgeon.preferences.shiftPreference === '24H_ONLY') continue;
         if (q.ocn >= SHIFT_QUOTAS[surgeon.type].ocn) continue;
+        if (atMaxLimit(surgeon, 'OCN', shifts, year, month)) continue;
 
         if (hasBlackout(surgeon, date, 'OCN')) continue;
         if (inRestWindowAfter(shifts, surgeon.id, date)) continue;
@@ -631,7 +713,9 @@ export function generateSchedule(
 
       for (const surgeon of candidates) {
         const q = getQuota(quotas, surgeon.id, year, month);
+        if (surgeon.preferences.shiftPreference === '24H_ONLY') continue;
         if (q.ocd >= SHIFT_QUOTAS[surgeon.type].ocd) continue;
+        if (atMaxLimit(surgeon, 'OCD', shifts, year, month)) continue;
 
         if (hasBlackout(surgeon, date, 'OCD')) continue;
         if (inRestWindowAfter(shifts, surgeon.id, date)) continue;
@@ -694,6 +778,8 @@ export function generateSchedule(
 
       if (!shifts.some(s => s.date === date && s.kind === 'OCD')) {
         const baseOCD = activeSurgeons.filter(s =>
+          s.preferences.shiftPreference !== '24H_ONLY' &&
+          !atMaxLimit(s, 'OCD', shifts, year, month) &&
           !hasBlackout(s, date, 'OCD') &&
           !inRestWindowAfter(shifts, s.id, date) &&
           !wouldViolateOCDRestWindow(shifts, s.id, date) &&
@@ -719,6 +805,8 @@ export function generateSchedule(
 
       if (!shifts.some(s => s.date === date && s.kind === 'OCN')) {
         const baseOCN = activeSurgeons.filter(s =>
+          s.preferences.shiftPreference !== '24H_ONLY' &&
+          !atMaxLimit(s, 'OCN', shifts, year, month) &&
           !hasBlackout(s, date, 'OCN') &&
           !inRestWindowAfter(shifts, s.id, date) &&
           !wouldViolateRestWindow(shifts, s.id, date) &&

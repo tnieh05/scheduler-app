@@ -13,11 +13,17 @@ export interface RobotBlock {
 export interface SurgeonPreferences {
   shiftPreference: 'none' | '24H' | '12H' | '24H_ONLY' | '12H_ONLY';
   customNotes: string;
+  maxOcd: number | null;
+  maxOcn: number | null;
+  max24h: number | null;
 }
 
 export const defaultPreferences: SurgeonPreferences = {
   shiftPreference: 'none',
   customNotes: '',
+  maxOcd: null,
+  maxOcn: null,
+  max24h: null,
 };
 
 export interface Surgeon {

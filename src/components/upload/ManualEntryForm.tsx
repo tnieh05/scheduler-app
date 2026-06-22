@@ -7,6 +7,10 @@ import { useAppState } from '../../store/AppContext';
 interface BlackoutEntry { date: string; type: BlackoutDate['type'] }
 interface RobotEntry { date: string; assistingOnly: boolean }
 
+// Returns the last filled-in date so new pickers open to the same month.
+function nextDefaultDate(dates: string[]): string {
+  return [...dates].reverse().find(d => /^\d{4}-\d{2}-\d{2}$/.test(d)) ?? '';
+}
 
 interface Props {
   initialSurgeon?: Surgeon;
@@ -157,21 +161,27 @@ export function ManualEntryForm({ initialSurgeon, onSaved }: Props) {
       {/* Type */}
       <div>
         <label className="block text-xs font-medium text-slate-600 mb-1">Type</label>
-        <div className="flex gap-3">
-          {(['EGS', 'NON_EGS', 'POOL'] as SurgeonType[]).map(t => (
-            <label key={t} className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="radio"
-                checked={type === t}
-                onChange={() => setType(t)}
-                className="accent-blue-500"
-              />
-              <span className="text-sm">
-                {t === 'EGS' ? 'EGS' : t === 'NON_EGS' ? 'Non-EGS' : 'Pool'}
-              </span>
-            </label>
-          ))}
-        </div>
+        {isEditing ? (
+          <div className="w-full border border-slate-200 rounded px-2 py-1.5 text-sm bg-slate-50 text-slate-700 select-none">
+            {type === 'EGS' ? 'EGS' : type === 'NON_EGS' ? 'Non-EGS' : 'Pool'}
+          </div>
+        ) : (
+          <div className="flex gap-3">
+            {(['EGS', 'NON_EGS', 'POOL'] as SurgeonType[]).map(t => (
+              <label key={t} className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  checked={type === t}
+                  onChange={() => setType(t)}
+                  className="accent-blue-500"
+                />
+                <span className="text-sm">
+                  {t === 'EGS' ? 'EGS' : t === 'NON_EGS' ? 'Non-EGS' : 'Pool'}
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Preferences — not shown for POOL since they only do OCN */}
@@ -235,6 +245,50 @@ export function ManualEntryForm({ initialSurgeon, onSaved }: Props) {
               );
             })()}
 
+            {/* Monthly max limits */}
+            {(() => {
+              const pref = prefs.shiftPreference;
+              const only24H = pref === '24H_ONLY';
+              const only12H = pref === '12H_ONLY';
+              const limits: { key: 'maxOcd' | 'maxOcn' | 'max24h'; label: string; disabled: boolean }[] = [
+                { key: 'maxOcd', label: 'Max OCD/mo', disabled: only24H },
+                { key: 'maxOcn', label: 'Max OCN/mo', disabled: only24H },
+                { key: 'max24h', label: 'Max 24H/mo', disabled: only12H },
+              ];
+              return (
+                <div>
+                  <span className="block text-xs text-slate-500 mb-1">Monthly call limits <span className="text-slate-400">(leave blank = no limit)</span></span>
+                  <div className="flex gap-2">
+                    {limits.map(({ key, label, disabled }) => (
+                      <div key={key} className="flex-1">
+                        <label className={`block text-[10px] mb-0.5 ${disabled ? 'text-slate-300' : 'text-slate-400'}`}>{label}</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={1}
+                          disabled={disabled}
+                          value={prefs[key] ?? ''}
+                          onChange={e => {
+                            const raw = e.target.value;
+                            setPrefs(p => ({
+                              ...p,
+                              [key]: raw === '' ? null : Math.max(0, parseInt(raw, 10)),
+                            }));
+                          }}
+                          placeholder="—"
+                          className={`w-full border rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-300 ${
+                            disabled
+                              ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
+                              : 'border-slate-300'
+                          }`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Custom notes */}
             <div>
               <label className="block text-xs text-slate-500 mb-1">Notes <span className="text-slate-400">(visible to scheduler, not used by generator)</span></label>
@@ -258,7 +312,7 @@ export function ManualEntryForm({ initialSurgeon, onSaved }: Props) {
               <label className="text-xs font-medium text-slate-600">Available Dates ({availableDates.length})</label>
               <button
                 type="button"
-                onClick={() => setAvailableDates(prev => [...prev, ''])}
+                onClick={() => setAvailableDates(prev => [...prev, nextDefaultDate(prev)])}
                 className="text-xs text-blue-500 hover:underline whitespace-nowrap"
               >
                 + Add date
@@ -274,7 +328,17 @@ export function ManualEntryForm({ initialSurgeon, onSaved }: Props) {
               <input
                 type="date"
                 value={d}
-                onChange={e => setAvailableDates(prev => prev.map((x, j) => j === i ? e.target.value : x))}
+                onChange={e => {
+                  const val = e.target.value;
+                  setAvailableDates(prev => {
+                    const updated = prev.map((x, j) => j === i ? val : x);
+                    // Pre-fill next empty row with same month so picker opens there
+                    if (val && i + 1 < updated.length && !updated[i + 1]) {
+                      updated[i + 1] = val.slice(0, 8) + '01';
+                    }
+                    return updated;
+                  });
+                }}
                 className="flex-1 border border-slate-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300"
               />
               <button
@@ -294,7 +358,7 @@ export function ManualEntryForm({ initialSurgeon, onSaved }: Props) {
             <label className="text-xs font-medium text-slate-600">Blackout Dates</label>
             <button
               type="button"
-              onClick={() => setBlackouts(prev => [...prev, { date: '', type: 'BOTH' }])}
+              onClick={() => setBlackouts(prev => [...prev, { date: nextDefaultDate(prev.map(b => b.date)), type: 'BOTH' }])}
               className="text-xs text-blue-500 hover:underline"
             >
               + Add
@@ -337,7 +401,7 @@ export function ManualEntryForm({ initialSurgeon, onSaved }: Props) {
             <label className="text-xs font-medium text-slate-600">Robot Blocks</label>
             <button
               type="button"
-              onClick={() => setRobots(prev => [...prev, { date: '', assistingOnly: false }])}
+              onClick={() => setRobots(prev => [...prev, { date: nextDefaultDate(prev.map(r => r.date)), assistingOnly: false }])}
               className="text-xs text-blue-500 hover:underline"
             >
               + Add

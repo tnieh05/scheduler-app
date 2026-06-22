@@ -8,6 +8,7 @@ import { weeklyCallLimitRule } from './weeklyCallLimit';
 import { postcallPrecallRule } from './postcallPrecall';
 import { quotaRule } from './quota';
 import { coverageRule } from './coverage';
+import { maxLimitRule } from './maxLimit';
 import type { ValidatorFn } from './ruleTypes';
 
 export const ALL_RULES: ValidatorFn[] = [
@@ -21,4 +22,5 @@ export const ALL_RULES: ValidatorFn[] = [
   weeklyCallLimitRule,
   postcallPrecallRule,
   quotaRule,
+  maxLimitRule,
 ];

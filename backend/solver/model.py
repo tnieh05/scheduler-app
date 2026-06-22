@@ -313,7 +313,20 @@ def solve_schedule(request: GenerateRequest) -> GenerateResponse:
                 if (s.id, d, '24H') in x
             ]
             if h24_terms:
-                model.add(sum(h24_terms) <= q['h24'])
+                h24_cap = s.preferences.max_24h if s.preferences.max_24h is not None else q['h24']
+                model.add(sum(h24_terms) <= h24_cap)
+            ocd_terms = [
+                x[(s.id, d, 'OCD')] for d in mdates
+                if (s.id, d, 'OCD') in x
+            ]
+            if ocd_terms and s.preferences.max_ocd is not None:
+                model.add(sum(ocd_terms) <= s.preferences.max_ocd)
+            ocn_terms = [
+                x[(s.id, d, 'OCN')] for d in mdates
+                if (s.id, d, 'OCN') in x
+            ]
+            if ocn_terms and s.preferences.max_ocn is not None:
+                model.add(sum(ocn_terms) <= s.preferences.max_ocn)
 
     # ── Weekend call limits ─────────────────────────────────────────────────
     # Max 2 weekend (Fri–Sun) calls per surgeon per month
@@ -459,13 +472,19 @@ def solve_schedule(request: GenerateRequest) -> GenerateResponse:
         range_spread = 0
 
     # Priority: per-month equity (×100) > cross-range total (×50) >
-    #           OCD/OCN balance (×10) > type preference (×1)
+    #           OCD/OCN balance (×10) > type preference (×1) > utilization (×3)
+    # Utilization: reward giving more calls when it doesn't affect spread.
+    # Without this term, the solver is indifferent between a surgeon having
+    # 2 vs 6 calls when another surgeon is stuck at the minimum — so low-
+    # availability or specialty-preference surgeons (e.g. 24H_ONLY with
+    # max24h=3) get left at 2 even when they could reach 6.
     equity = 100 * sum(spread_terms) if spread_terms else 0
     cross_equity = 50 * range_spread
     balance = 10 * sum(balance_terms) if balance_terms else 0
     pref = sum(pref_terms) if pref_terms else 0
+    utilization = -3 * sum(range_tc_vars) if range_tc_vars else 0
     if spread_terms or range_tc_vars or balance_terms or pref_terms:
-        model.minimize(equity + cross_equity + balance + pref)
+        model.minimize(equity + cross_equity + balance + pref + utilization)
 
     # ── Solve ───────────────────────────────────────────────────────────────
     solver = cp_model.CpSolver()

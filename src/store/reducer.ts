@@ -113,13 +113,13 @@ export function reducer(state: AppState, action: Action): AppState {
         const { range } = state.schedule;
         const allPoolIds = new Set(surgeons.filter(s => s.type === 'POOL').map(s => s.id));
 
-        // Replace this pool surgeon's OCN shifts with the updated availableDates.
-        // Pool surgeons cover the OCN slot only; OCD must come from regular surgeons.
+        // Replace ALL of this pool surgeon's shifts with fresh OCN from availableDates.
+        // Pool surgeons may only have OCN; strip any accidental OCD/24H as well.
         const inRange = (action.payload.availableDates ?? []).filter(
           d => d >= range.start && d <= range.end,
         );
         let shifts: Shift[] = state.schedule.shifts.filter(
-          s => !(s.surgeonId === poolId && s.kind === 'OCN'),
+          s => s.surgeonId !== poolId,
         );
         for (const date of inRange) {
           shifts.push({

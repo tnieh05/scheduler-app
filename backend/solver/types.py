@@ -43,6 +43,9 @@ class RobotBlock(_CamelModel):
 class SurgeonPreferences(_CamelModel):
     shift_preference: str = 'none'
     custom_notes: str = ''
+    max_ocd: Optional[int] = None
+    max_ocn: Optional[int] = None
+    max_24h: Optional[int] = Field(None, alias='max24h')
 
 
 class Surgeon(_CamelModel):

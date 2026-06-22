@@ -12,7 +12,10 @@ export type RuleId =
   | 'POSTCALL_MISSING'
   | 'COVERAGE_GAP'
   | 'EGS_COVERAGE'
-  | 'WEEKLY_CALL_LIMIT';
+  | 'WEEKLY_CALL_LIMIT'
+  | 'MAX_OCD_EXCEEDED'
+  | 'MAX_OCN_EXCEEDED'
+  | 'MAX_24H_EXCEEDED';
 
 export interface Violation {
   id: string;
