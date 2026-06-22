@@ -560,6 +560,43 @@ export function generateSchedule(
     );
 
     // ── Phase 2: 24H Shifts ───────────────────────────────────────────────
+    // ── Pre-Phase 2: 24H_ONLY surgeons (weekdays-first) ─────────────────
+    // Assign 24H_ONLY surgeons before the main Phase 2 loop, using a
+    // weekdays-first date ordering. The main loop processes weekends first,
+    // which causes 24H_ONLY surgeons to take Fri wk1 + Fri wk2, then
+    // has24HInSameWeek blocks all same-week Mon–Thu. By pre-assigning on
+    // weekdays (wk1 Mon, wk2 Mon, wk4 Mon…), each 24H lands in a different
+    // week, making room for the full max24h count even when weeks 3–4 have
+    // EGS or robot-block constraints.
+    for (const surgeon of activeSurgeons) {
+      if (surgeon.preferences.shiftPreference !== '24H_ONLY') continue;
+      if (surgeon.preferences.max24h == null) continue;
+      const orderedDates = [
+        ...monthDates.filter(d => !isWeekend(d)),
+        ...monthDates.filter(d => isWeekend(d)),
+      ];
+      for (const d of orderedDates) {
+        if (atMaxLimit(surgeon, '24H', shifts, year, month)) break;
+        if (shifts.some(s => s.date === d && s.kind === '24H')) continue;
+        if (hasBlackout(surgeon, d, 'OCD') || hasBlackout(surgeon, d, 'OCN')) continue;
+        if (inRestWindowAfter(shifts, surgeon.id, d)) continue;
+        if (wouldViolateRestWindow(shifts, surgeon.id, d)) continue;
+        if (weekCallCount(shifts, surgeon.id, d) >= 2) continue;
+        if (has24HInSameWeek(shifts, surgeon.id, d)) continue;
+        if (blockedByEGS(shifts, surgeon.id, d)) continue;
+        if (robotBlocksOCN(surgeon, d)) continue;
+        if (robotBlocksOnDate(surgeon, d, '24H')) continue;
+        if (!weekendEligible(shifts, surgeon.id, d, year, month)) continue;
+        const poolIdx = shifts.findIndex(
+          s => s.date === d && s.kind === 'OCN' && poolIdSet.has(s.surgeonId),
+        );
+        if (poolIdx !== -1) shifts.splice(poolIdx, 1);
+        shifts.push(makeShift(surgeon.id, d, '24H', undefined, ['POSTCALL_AM', 'POSTCALL_PM']));
+        const q = getQuota(quotas, surgeon.id, year, month);
+        q.h24++; q.ocd++; q.ocn++;
+      }
+    }
+
     // Weekend dates are processed before weekdays so that end-of-month Fridays
     // (which are hardest to cover due to EGS blocks + consecutive-weekend
     // constraints) receive a 24H assignment before any surgeon's monthly quota
