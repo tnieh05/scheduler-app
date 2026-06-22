@@ -486,13 +486,6 @@ export function generateSchedule(
   range: DateRange,
   existingSchedule?: Schedule,
 ): Schedule {
-  console.log('[Generator] preferences snapshot:');
-  surgeons.forEach(s => {
-    const p = s.preferences;
-    if (p.shiftPreference !== 'none' || p.max24h != null || p.maxOcd != null || p.maxOcn != null) {
-      console.log(`  ${s.name}: pref=${p.shiftPreference} max24h=${p.max24h} maxOcd=${p.maxOcd} maxOcn=${p.maxOcn}`);
-    }
-  });
   const poolSurgeons = surgeons.filter(s => s.type === 'POOL');
   const activeSurgeons = surgeons.filter(s => s.type !== 'POOL');
 
@@ -671,6 +664,36 @@ export function generateSchedule(
         q.h24++;
         q.ocd++;
         q.ocn++;
+      }
+    }
+
+    // ── 24H_ONLY make-up pass ─────────────────────────────────────────────
+    // Phase 2's weekends-first order assigns Lee's weekend 24H in weeks 1
+    // and 2 first, then has24HInSameWeek blocks all same-week weekdays.
+    // This pass retries all uncovered dates (no half-month rule) to fill
+    // any remaining gap for 24H_ONLY surgeons below their max24h.
+    for (const surgeon of activeSurgeons) {
+      if (surgeon.preferences.shiftPreference !== '24H_ONLY') continue;
+      if (surgeon.preferences.max24h == null) continue;
+      for (const date of monthDates) {
+        if (atMaxLimit(surgeon, '24H', shifts, year, month)) break;
+        if (shifts.some(s => s.date === date && s.kind === '24H')) continue;
+        if (hasBlackout(surgeon, date, 'OCD') || hasBlackout(surgeon, date, 'OCN')) continue;
+        if (inRestWindowAfter(shifts, surgeon.id, date)) continue;
+        if (wouldViolateRestWindow(shifts, surgeon.id, date)) continue;
+        if (weekCallCount(shifts, surgeon.id, date) >= 2) continue;
+        if (has24HInSameWeek(shifts, surgeon.id, date)) continue;
+        if (blockedByEGS(shifts, surgeon.id, date)) continue;
+        if (robotBlocksOCN(surgeon, date)) continue;
+        if (robotBlocksOnDate(surgeon, date, '24H')) continue;
+        if (!weekendEligible(shifts, surgeon.id, date, year, month)) continue;
+        const poolIdx = shifts.findIndex(
+          s => s.date === date && s.kind === 'OCN' && poolIdSet.has(s.surgeonId),
+        );
+        if (poolIdx !== -1) shifts.splice(poolIdx, 1);
+        shifts.push(makeShift(surgeon.id, date, '24H', undefined, ['POSTCALL_AM', 'POSTCALL_PM']));
+        const q = getQuota(quotas, surgeon.id, year, month);
+        q.h24++; q.ocd++; q.ocn++;
       }
     }
 
