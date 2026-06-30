@@ -327,6 +327,21 @@ export function parseKpBlockScheduleCsv(csv: string): HtmlParseResult {
     if (dates.length > 0) datesByCol.set(col, dates);
   }
 
+  // Pre-compute the range start so we can detect post-call status on day 1.
+  const allScheduleDates = [...datesByCol.values()].flat().sort();
+  const rangeStart = allScheduleDates[0] ?? '';
+
+  // The 3 calendar days starting from rangeStart that fall inside a rest window
+  // if the surgeon worked an OCN/24H the night before the range started.
+  function isoAddDays(date: string, n: number): string {
+    const d = new Date(date + 'T12:00:00');
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+  const postcallRestDates = rangeStart
+    ? [rangeStart, isoAddDays(rangeStart, 1), isoAddDays(rangeStart, 2)]
+    : [];
+
   const surgeons: ParsedSurgeon[] = [];
   let currentName: string | null = null;
   let currentRobot: RobotBlock[] = [];
@@ -350,6 +365,16 @@ export function parseKpBlockScheduleCsv(csv: string): HtmlParseResult {
       if (!cell) continue;
       const dates = datesByCol.get(col);
       if (!dates?.length) continue;
+
+      // "Post Call ATO AM/PM" on day 1 means the surgeon worked OCN the night
+      // before the range started — apply the 3-day rest window as BOTH blackouts.
+      if (/post\s*call/i.test(cell) && dates.some(d => d === rangeStart)) {
+        for (const blockDate of postcallRestDates) {
+          const key = `bo:${blockDate}:BOTH`;
+          if (!seen.has(key)) { seen.add(key); currentBlackouts.push({ date: blockDate, type: 'BOTH' }); }
+        }
+      }
+
       const constraint = classifyConstraint(cell);
       if (!constraint) continue;
       for (const date of dates) {
@@ -401,8 +426,9 @@ export function parseKpBlockScheduleCsv(csv: string): HtmlParseResult {
   }
   flushSurgeon();
 
-  const allDates = [...datesByCol.values()].flat().sort();
-  const dateRange = allDates.length > 0 ? { start: allDates[0], end: allDates[allDates.length - 1] } : null;
+  const dateRange = allScheduleDates.length > 0
+    ? { start: allScheduleDates[0], end: allScheduleDates[allScheduleDates.length - 1] }
+    : null;
 
   return { surgeons, dateRange };
 }

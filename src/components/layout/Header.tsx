@@ -12,7 +12,9 @@ export function Header() {
   return (
     <>
       <header className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-slate-200 shrink-0">
-        <h1 className="text-base font-bold text-slate-800 whitespace-nowrap">On-Call Scheduler</h1>
+        <h1 className="text-base font-bold text-slate-800 whitespace-nowrap">
+          On-Call Scheduler <span className="font-normal ml-2" style={{ color: '#808A8F' }}>DRV Antioch</span>
+        </h1>
 
         <div className="flex items-center gap-2">
           <ImportButton />
@@ -21,7 +23,8 @@ export function Header() {
           <SaveScheduleButton />
           <button
             onClick={() => setHistoryOpen(true)}
-            className="relative border border-slate-300 hover:border-slate-400 text-slate-600 text-sm px-3 py-1.5 rounded transition-colors"
+            className="relative border text-slate-600 text-sm h-8 px-3 rounded transition-colors"
+            style={{ borderColor: '#ABB5BB' }}
           >
             History
             {saves.length > 0 && (

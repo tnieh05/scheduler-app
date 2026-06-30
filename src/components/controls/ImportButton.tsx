@@ -33,7 +33,8 @@ export function ImportButton({ className }: { className?: string } = {}) {
     <>
       <button
         onClick={() => setOpen(true)}
-        className={`text-slate-500 hover:text-slate-700 text-sm font-medium px-3 py-1.5 rounded border border-slate-200 hover:border-slate-300 transition-colors ${className ?? ''}`}
+        className={`text-slate-500 hover:text-slate-700 text-sm font-medium h-8 px-3 rounded border transition-colors ${className ?? ''}`}
+        style={{ borderColor: '#ABB5BB' }}
       >
         Import
       </button>

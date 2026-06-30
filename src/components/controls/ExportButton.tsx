@@ -45,7 +45,8 @@ export function ExportButton({ className }: { className?: string } = {}) {
     <button
       onClick={handleExport}
       disabled={!schedule}
-      className={`border border-slate-300 hover:border-slate-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 text-sm px-3 py-1.5 rounded transition-colors ${className ?? ''}`}
+      className={`border disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 text-sm h-8 px-3 rounded transition-colors ${className ?? ''}`}
+      style={{ borderColor: '#ABB5BB' }}
     >
       Export CSV
     </button>

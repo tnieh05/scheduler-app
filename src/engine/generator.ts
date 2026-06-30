@@ -495,6 +495,17 @@ export function generateSchedule(
     s => s.date >= range.start && s.date <= range.end,
   );
 
+  // Also seed OCN/24H shifts from up to 3 days before range start so their rest
+  // windows are respected on the first days of the new month. These shifts are
+  // excluded from the output at the return statement below.
+  const preRangeSeeds: Shift[] = (existingSchedule?.shifts ?? []).filter(s => {
+    if (s.kind !== 'OCN' && s.kind !== '24H') return false;
+    // Rest window for OCN/24H starts the day after the shift date
+    const restStart = addDays(s.date, 1);
+    return s.date < range.start && restStart <= range.start;
+  });
+  shifts.push(...preRangeSeeds);
+
   // Add pool OCN from availableDates that are not already seeded.
   // Pool surgeons cover the OCN slot only; OCD must still come from regular surgeons.
   for (const pool of poolSurgeons) {
@@ -897,5 +908,5 @@ export function generateSchedule(
     localSearchRefine(shifts, activeSurgeons, year, month);
   }
 
-  return { range, shifts };
+  return { range, shifts: shifts.filter(s => s.date >= range.start && s.date <= range.end) };
 }

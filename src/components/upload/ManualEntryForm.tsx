@@ -188,7 +188,7 @@ export function ManualEntryForm({ initialSurgeon, onSaved }: Props) {
       {type !== 'POOL' && (
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-2">Preferences</label>
-          <div className="space-y-2">
+          <div className="space-y-4">
             {/* Shift type preference — row 1: type */}
             {(() => {
               const pref = prefs.shiftPreference;

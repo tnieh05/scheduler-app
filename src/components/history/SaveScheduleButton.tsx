@@ -39,7 +39,8 @@ export function SaveScheduleButton() {
       <button
         onClick={() => canSave && setOpen(o => !o)}
         disabled={!canSave}
-        className="w-full border border-slate-300 hover:border-slate-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 text-sm px-3 py-1.5 rounded transition-colors"
+        className="w-full border disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 text-sm h-8 px-3 rounded transition-colors"
+        style={{ borderColor: '#ABB5BB' }}
       >
         Save
       </button>
@@ -67,7 +68,8 @@ export function SaveScheduleButton() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => setOpen(false)}
-                    className="flex-1 py-1.5 text-xs rounded border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+                    className="flex-1 py-1.5 text-xs rounded border text-slate-500 hover:bg-slate-50 transition-colors"
+                    style={{ borderColor: '#ABB5BB' }}
                   >
                     Cancel
                   </button>

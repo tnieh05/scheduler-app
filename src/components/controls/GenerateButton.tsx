@@ -40,7 +40,7 @@ export function GenerateButton() {
     <button
       onClick={handleGenerate}
       disabled={surgeons.length === 0 || isGenerating}
-      className="bg-blue-500 hover:bg-blue-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-1.5 rounded transition-colors"
+      className="bg-blue-500 hover:bg-blue-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-medium h-8 px-4 rounded transition-colors"
     >
       {isGenerating ? 'Generating…' : 'Generate Schedule'}
     </button>

@@ -25,7 +25,8 @@ function DeleteModal({
         <div className="flex gap-2 pt-1">
           <button
             onClick={onCancel}
-            className="flex-1 py-1.5 text-xs rounded border border-slate-200 text-slate-500 hover:border-slate-300 transition-colors"
+            className="flex-1 py-1.5 text-xs rounded border text-slate-500 transition-colors"
+            style={{ borderColor: '#ABB5BB' }}
           >
             Cancel
           </button>

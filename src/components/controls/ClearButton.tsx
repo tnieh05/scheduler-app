@@ -28,7 +28,8 @@ function ClearModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: 
         <div className="flex gap-2 pt-1">
           <button
             onClick={onCancel}
-            className="flex-1 py-1.5 text-xs rounded border border-slate-200 text-slate-500 hover:border-slate-300 transition-colors"
+            className="flex-1 py-1.5 text-xs rounded border text-slate-500 transition-colors"
+            style={{ borderColor: '#ABB5BB' }}
           >
             Cancel
           </button>
@@ -65,7 +66,8 @@ export function ClearButton() {
       <button
         onClick={() => setOpen(true)}
         disabled={!hasAnything}
-        className="text-slate-500 hover:text-slate-700 disabled:text-slate-300 disabled:cursor-not-allowed text-sm font-medium px-3 py-1.5 rounded border border-slate-200 hover:border-slate-300 disabled:border-slate-100 transition-colors"
+        className="text-slate-500 hover:text-slate-700 disabled:text-slate-300 disabled:cursor-not-allowed text-sm font-medium h-8 px-3 rounded border disabled:border-slate-100 transition-colors"
+        style={hasAnything ? { borderColor: '#ABB5BB' } : undefined}
       >
         Clear
       </button>

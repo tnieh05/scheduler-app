@@ -84,7 +84,7 @@ export function AppShell() {
           )}
 
           {!conflictsOpen && totalViolations > 0 && (
-            <div className="flex-1 flex items-center justify-center">
+            <div className="flex justify-center pt-4">
               <span
                 className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
                   errors > 0 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
