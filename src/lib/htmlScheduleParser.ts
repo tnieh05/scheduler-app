@@ -40,7 +40,7 @@ function classifyConstraint(
   if (/^AD\b/.test(t)) return { kind: 'blackout', type: 'OCD' };
 
   if (t === 'NO DAY CALL' || t === 'OFF PM') return { kind: 'blackout', type: 'OCD' };
-  if (t === 'NO CALL' || t === 'ATO' || t === 'VAC') return { kind: 'blackout', type: 'BOTH' };
+  if (t === 'NO CALL' || t === 'ATO' || t === 'VAC' || t === 'SL') return { kind: 'blackout', type: 'BOTH' };
   return null;
 }
 
