@@ -131,6 +131,7 @@ export function CalendarGrid() {
                         highlightedDate={highlightedDate}
                         isHoliday={holidays.has(date)}
                         isWeekend={dow === 5 || dow === 6 || dow === 0}
+                        isRowSelected={isSelected}
                         blackout={blackout}
                         robotBlock={robotBlock}
                       />

@@ -16,6 +16,7 @@ interface Props {
   highlightedDate: string | null;
   isHoliday?: boolean;
   isWeekend?: boolean;
+  isRowSelected?: boolean;
   blackout?: BlackoutDate;
   robotBlock?: RobotBlock;
 }
@@ -39,6 +40,7 @@ export function ShiftCell({
   highlightedDate,
   isHoliday,
   isWeekend,
+  isRowSelected,
   blackout,
   robotBlock,
 }: Props) {
@@ -97,6 +99,11 @@ export function ShiftCell({
         ${isHighlightedDate ? 'ring-1 ring-inset ring-blue-300' : ''}
       `}
     >
+      {/* Row selection highlight */}
+      {isRowSelected && (
+        <div className="absolute inset-0 bg-blue-100/50 pointer-events-none z-0" />
+      )}
+
       {/* Blackout overlay */}
       {blackout && (
         <div
