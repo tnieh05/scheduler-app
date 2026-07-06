@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { isWeekend, isoMonth, isoYear, weekMonday } from '../../lib/dateUtils';
 import type { ValidatorFn } from './ruleTypes';
 
-export const weekendLimitsRule: ValidatorFn = (schedule, surgeons) => {
+export const weekendLimitsRule: ValidatorFn = (schedule, surgeons, rules) => {
   const violations = [];
 
   // Group on-call shifts (OCD/OCN/24H) by surgeon
@@ -17,7 +17,7 @@ export const weekendLimitsRule: ValidatorFn = (schedule, surgeons) => {
     const mine = onCallShifts.filter(s => s.surgeonId === surgeon.id);
     const weekendShifts = mine.filter(s => isWeekend(s.date));
 
-    // Rule 1: max 2 weekend shifts per month
+    // Rule 1: max weekend shifts per month (rules.maxWeekendShiftsPerMonth)
     const byMonth = new Map<string, typeof weekendShifts>();
     for (const s of weekendShifts) {
       const key = `${isoYear(s.date)}-${isoMonth(s.date)}`;
@@ -26,14 +26,14 @@ export const weekendLimitsRule: ValidatorFn = (schedule, surgeons) => {
       byMonth.set(key, arr);
     }
     for (const [monthKey, shifts] of byMonth) {
-      if (shifts.length > 2) {
+      if (shifts.length > rules.maxWeekendShiftsPerMonth) {
         violations.push({
           id: uuidv4(),
           ruleId: 'WEEKEND_LIMIT' as const,
           shiftIds: shifts.map(s => s.id),
           surgeonId: surgeon.id,
           date: shifts[0].date,
-          message: `${surgeon.name}: ${shifts.length} weekend shifts in ${monthKey} (max 2)`,
+          message: `${surgeon.name}: ${shifts.length} weekend shifts in ${monthKey} (max ${rules.maxWeekendShiftsPerMonth})`,
           severity: 'error' as const,
         });
       }

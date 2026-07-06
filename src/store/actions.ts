@@ -2,6 +2,7 @@ import type { Surgeon } from '../types/surgeon';
 import type { Shift } from '../types/shift';
 import type { Schedule, DateRange } from '../types/schedule';
 import type { SavedSchedule } from '../types/savedSchedule';
+import type { ScheduleRules } from '../constants/scheduleRules';
 
 export type Action =
   | { type: 'ADD_SURGEONS'; payload: Surgeon[] }
@@ -25,4 +26,5 @@ export type Action =
   | { type: 'TOGGLE_PIN_SHIFT'; payload: { shiftId: string } }
   | { type: 'SET_RAW_SCHEDULE_FILE'; payload: string | null }
   | { type: 'LOAD_SAVED_SCHEDULE'; payload: SavedSchedule }
-  | { type: 'MERGE_IMPORTED_RANGE'; payload: DateRange };
+  | { type: 'MERGE_IMPORTED_RANGE'; payload: DateRange }
+  | { type: 'SET_RULES'; payload: ScheduleRules };

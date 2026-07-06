@@ -1,5 +1,6 @@
 import type { Schedule, DateRange } from './schedule';
 import type { Surgeon } from './surgeon';
+import type { ScheduleRules } from '../constants/scheduleRules';
 
 export interface SavedSchedule {
   id: string;
@@ -8,4 +9,5 @@ export interface SavedSchedule {
   schedule: Schedule;
   surgeons: Surgeon[];
   selectedRange: DateRange;
+  rules?: ScheduleRules; // rules in effect when saved; absent on older saves
 }

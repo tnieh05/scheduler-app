@@ -16,12 +16,6 @@ from .types import (
 
 CALL_KINDS = ['OCD', 'OCN', '24H']
 
-# Monthly max per kind (ocd and ocn include 24H contributions)
-MONTHLY_QUOTAS = {
-    SurgeonType.EGS:     {'ocd': 3, 'ocn': 2, 'h24': 2},
-    SurgeonType.NON_EGS: {'ocd': 4, 'ocn': 3, 'h24': 2},
-    SurgeonType.POOL:    {'ocd': 0, 'ocn': 0, 'h24': 6},
-}
 
 
 def _iso(d: date) -> str:
@@ -59,6 +53,7 @@ def _month_key(d: str) -> str:
 def solve_schedule(request: GenerateRequest) -> GenerateResponse:
     all_dates = _date_range(request.range_.start, request.range_.end)
     date_set: Set[str] = set(all_dates)
+    rules = request.rules
 
     pool_surgeons = [s for s in request.surgeons if s.type == SurgeonType.POOL]
     active_surgeons = [s for s in request.surgeons if s.type != SurgeonType.POOL]
@@ -272,12 +267,14 @@ def solve_schedule(request: GenerateRequest) -> GenerateResponse:
                         model.add(x[(s.id, d_prev, 'OCD')] == 0)
 
     # ── Rest windows ────────────────────────────────────────────────────────
-    # After OCD on day D: no call on D+1, D+2
-    # After OCN or 24H on day D: no call on D+1, D+2, D+3
+    # Window = rules.rest_window_days counted from when the shift ends (the day
+    # after an OCN/24H, the same day for an OCD). With the default of 3:
+    # after OCD on day D: no call on D+1, D+2
+    # after OCN or 24H on day D: no call on D+1, D+2, D+3
     for s in active_surgeons:
         for i, d1 in enumerate(all_dates):
             if (s.id, d1, 'OCD') in x:
-                for delta in (1, 2):
+                for delta in range(1, rules.rest_window_days):
                     j = i + delta
                     if j >= len(all_dates):
                         break
@@ -288,7 +285,7 @@ def solve_schedule(request: GenerateRequest) -> GenerateResponse:
 
             d1_nights = [x[(s.id, d1, k)] for k in ('OCN', '24H') if (s.id, d1, k) in x]
             if d1_nights:
-                for delta in (1, 2, 3):
+                for delta in range(1, rules.rest_window_days + 1):
                     j = i + delta
                     if j >= len(all_dates):
                         break
@@ -306,14 +303,17 @@ def solve_schedule(request: GenerateRequest) -> GenerateResponse:
         month_dates.setdefault(_month_key(d), []).append(d)
 
     for s in active_surgeons:
-        q = MONTHLY_QUOTAS[s.type]
         for ym, mdates in month_dates.items():
             h24_terms = [
                 x[(s.id, d, '24H')] for d in mdates
                 if (s.id, d, '24H') in x
             ]
             if h24_terms:
-                h24_cap = s.preferences.max_24h if s.preferences.max_24h is not None else q['h24']
+                h24_cap = (
+                    s.preferences.max_24h
+                    if s.preferences.max_24h is not None
+                    else rules.monthly_max24h
+                )
                 model.add(sum(h24_terms) <= h24_cap)
             ocd_terms = [
                 x[(s.id, d, 'OCD')] for d in mdates
@@ -329,7 +329,7 @@ def solve_schedule(request: GenerateRequest) -> GenerateResponse:
                 model.add(sum(ocn_terms) <= s.preferences.max_ocn)
 
     # ── Weekend call limits ─────────────────────────────────────────────────
-    # Max 2 weekend (Fri–Sun) calls per surgeon per month
+    # Max weekend (Fri–Sun) calls per surgeon per month
     for s in active_surgeons:
         for ym, mdates in month_dates.items():
             wknd = [
@@ -337,7 +337,7 @@ def solve_schedule(request: GenerateRequest) -> GenerateResponse:
                 if (s.id, d, k) in x and _is_weekend(d)
             ]
             if wknd:
-                model.add(sum(wknd) <= 2)
+                model.add(sum(wknd) <= rules.max_weekend_shifts_per_month)
 
     # No consecutive weekends: if surgeon works a weekend call in week N,
     # they cannot work a weekend call in week N+1.
@@ -369,7 +369,7 @@ def solve_schedule(request: GenerateRequest) -> GenerateResponse:
             model.add(sum(ww2) == 0).only_enforce_if(hw2.Not())
             model.add(hw1 + hw2 <= 1)
 
-    # ── Max 2 calls per Mon–Sun week ────────────────────────────────────────
+    # ── Max calls per Mon–Sun week (rules.max_calls_per_week) ──────────────
     for s in active_surgeons:
         for mon, wdates in week_dates.items():
             wk_calls = [
@@ -377,7 +377,7 @@ def solve_schedule(request: GenerateRequest) -> GenerateResponse:
                 if (s.id, d, k) in x
             ]
             if wk_calls:
-                model.add(sum(wk_calls) <= 2)
+                model.add(sum(wk_calls) <= rules.max_calls_per_week)
 
     # ── Objective: minimize sum of per-month call-count spreads ────────────
     # Optimizing per-month (not total-range) ensures equity within each

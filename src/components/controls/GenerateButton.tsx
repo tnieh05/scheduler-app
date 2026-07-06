@@ -19,6 +19,7 @@ export function GenerateButton() {
           surgeons,
           range: selectedRange,
           existingShifts: schedule?.shifts ?? [],
+          rules: state.rules,
         }),
       });
 
@@ -31,8 +32,14 @@ export function GenerateButton() {
       dispatch({ type: 'SET_SCHEDULE', payload: { range: selectedRange, shifts } });
     } catch (err) {
       console.warn('API solver unavailable, falling back to local generator:', err);
-      const next = generateSchedule(surgeons, selectedRange, schedule ?? undefined);
-      dispatch({ type: 'SET_SCHEDULE', payload: next });
+      try {
+        const next = generateSchedule(surgeons, selectedRange, schedule ?? undefined, state.rules);
+        dispatch({ type: 'SET_SCHEDULE', payload: next });
+      } catch (fallbackErr) {
+        // Both engines failed — reset the flag so the button doesn't stay stuck
+        console.error('Local generator also failed:', fallbackErr);
+        dispatch({ type: 'SET_IS_GENERATING', payload: false });
+      }
     }
   }
 

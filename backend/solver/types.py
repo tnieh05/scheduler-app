@@ -73,10 +73,25 @@ class DateRange(BaseModel):
     end: str
 
 
+class ScheduleRules(_CamelModel):
+    """Tunable scheduling rules. Defaults must stay in sync with the frontend's
+    DEFAULT_RULES in src/constants/scheduleRules.ts.
+
+    Rest-window semantics: the window is counted from when the shift ends —
+    the day after an OCN/24H, the same day for an OCD. A window of 3 blocks
+    the 2 days after an OCD and the 3 days after an OCN/24H.
+    """
+    rest_window_days: int = 3
+    max_calls_per_week: int = 2
+    max_weekend_shifts_per_month: int = 2
+    monthly_max24h: int = 2
+
+
 class GenerateRequest(_CamelModel):
     surgeons: List[Surgeon]
     range_: DateRange = Field(alias='range')
     existing_shifts: Optional[List[Shift]] = None
+    rules: ScheduleRules = Field(default_factory=ScheduleRules)
 
 
 class GenerateResponse(BaseModel):

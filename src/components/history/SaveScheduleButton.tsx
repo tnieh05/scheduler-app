@@ -8,6 +8,7 @@ export function SaveScheduleButton() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const canSave = !!state.schedule && state.hasGenerated;
@@ -18,13 +19,18 @@ export function SaveScheduleButton() {
       const { start, end } = state.schedule?.range ?? { start: '', end: '' };
       setName(`Schedule ${start} – ${end}`);
       setSaved(false);
+      setError(null);
       setTimeout(() => inputRef.current?.select(), 0);
     }
   }, [open]);
 
   function handleSave() {
     if (!state.schedule) return;
-    save(name, state.schedule, state.surgeons, state.selectedRange);
+    const result = save(name, state.schedule, state.surgeons, state.selectedRange, state.rules);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
     setSaved(true);
     setTimeout(() => setOpen(false), 800);
   }
@@ -65,6 +71,7 @@ export function SaveScheduleButton() {
                   className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
                   placeholder="e.g. June 2026 schedule"
                 />
+                {error && <p className="text-xs text-red-500">{error}</p>}
                 <div className="flex gap-2">
                   <button
                     onClick={() => setOpen(false)}

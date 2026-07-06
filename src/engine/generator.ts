@@ -7,6 +7,12 @@ import {
   isWeekend, weekMonday,
 } from '../lib/dateUtils';
 import { SHIFT_QUOTAS } from '../constants/shiftQuotas';
+import { DEFAULT_RULES, type ScheduleRules } from '../constants/scheduleRules';
+
+// Active rule set for the current generateSchedule() run. Module-level so the
+// many helper functions below don't each need a rules parameter; safe because
+// generation is synchronous.
+let R: ScheduleRules = DEFAULT_RULES;
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -68,7 +74,7 @@ function inRestWindowAfter(shifts: Shift[], surgeonId: string, date: string): bo
     if (s.kind === 'EGS') return false;
     const restStart = s.kind === 'OCN' || s.kind === '24H' ? addDays(s.date, 1) : s.date;
     const gap = daysBetween(restStart, date);
-    return gap >= 0 && gap < 3;
+    return gap >= 0 && gap < R.restWindowDays;
   });
 }
 
@@ -80,7 +86,7 @@ function wouldViolateRestWindow(shifts: Shift[], surgeonId: string, date: string
   return shifts.some(s => {
     if (s.surgeonId !== surgeonId) return false;
     const gap = daysBetween(ocnEnd, s.date);
-    return gap >= 0 && gap < 3;
+    return gap >= 0 && gap < R.restWindowDays;
   });
 }
 
@@ -91,7 +97,7 @@ function wouldViolateOCDRestWindow(shifts: Shift[], surgeonId: string, date: str
   return shifts.some(s => {
     if (s.surgeonId !== surgeonId) return false;
     const gap = daysBetween(date, s.date);
-    return gap >= 0 && gap < 3;
+    return gap >= 0 && gap < R.restWindowDays;
   });
 }
 
@@ -247,7 +253,7 @@ function weekendEligible(
 ): boolean {
   if (!isWeekend(date)) return true;
   // Hard cap: never exceed 2 on-call weekend shifts in the same calendar month
-  if (weekendShiftCount(shifts, surgeonId, year, month) >= 2) return false;
+  if (weekendShiftCount(shifts, surgeonId, year, month) >= R.maxWeekendShiftsPerMonth) return false;
   // No consecutive weekends (checks the immediately adjacent week in either direction)
   if (hasAdjacentWeekendShift(shifts, surgeonId, date)) return false;
   return true;
@@ -276,7 +282,7 @@ function canAssign(
   if (hasShiftOnDate(shifts, surgeon.id, date)) return false;
   if (blockedByEGS(shifts, surgeon.id, date)) return false;
   if (inRestWindowAfter(shifts, surgeon.id, date)) return false;
-  if (weekCallCount(shifts, surgeon.id, date) >= 2) return false;
+  if (weekCallCount(shifts, surgeon.id, date) >= R.maxCallsPerWeek) return false;
   if (!weekendEligible(shifts, surgeon.id, date, year, month)) return false;
   const pref = surgeon.preferences.shiftPreference;
   if (kind === 'OCD') {
@@ -485,7 +491,9 @@ export function generateSchedule(
   surgeons: Surgeon[],
   range: DateRange,
   existingSchedule?: Schedule,
+  rules: ScheduleRules = DEFAULT_RULES,
 ): Schedule {
+  R = rules;
   const poolSurgeons = surgeons.filter(s => s.type === 'POOL');
   const activeSurgeons = surgeons.filter(s => s.type !== 'POOL');
 
@@ -592,7 +600,7 @@ export function generateSchedule(
         if (hasBlackout(surgeon, d, 'OCD') || hasBlackout(surgeon, d, 'OCN')) continue;
         if (inRestWindowAfter(shifts, surgeon.id, d)) continue;
         if (wouldViolateRestWindow(shifts, surgeon.id, d)) continue;
-        if (weekCallCount(shifts, surgeon.id, d) >= 2) continue;
+        if (weekCallCount(shifts, surgeon.id, d) >= R.maxCallsPerWeek) continue;
         if (has24HInSameWeek(shifts, surgeon.id, d)) continue;
         if (blockedByEGS(shifts, surgeon.id, d)) continue;
         if (robotBlocksOCN(surgeon, d)) continue;
@@ -676,7 +684,7 @@ export function generateSchedule(
         if (hasBlackout(surgeon, date, 'OCD') || hasBlackout(surgeon, date, 'OCN')) return false;
         if (inRestWindowAfter(shifts, surgeon.id, date)) return false;
         if (wouldViolateRestWindow(shifts, surgeon.id, date)) return false;
-        if (weekCallCount(shifts, surgeon.id, date) >= 2) return false;
+        if (weekCallCount(shifts, surgeon.id, date) >= R.maxCallsPerWeek) return false;
         if (has24HInSameWeek(shifts, surgeon.id, date)) return false;
         if (blockedByEGS(shifts, surgeon.id, date)) return false;
         if (robotBlocksOCN(surgeon, date)) return false;
@@ -729,7 +737,7 @@ export function generateSchedule(
         if (hasBlackout(surgeon, date, 'OCD') || hasBlackout(surgeon, date, 'OCN')) continue;
         if (inRestWindowAfter(shifts, surgeon.id, date)) continue;
         if (wouldViolateRestWindow(shifts, surgeon.id, date)) continue;
-        if (weekCallCount(shifts, surgeon.id, date) >= 2) continue;
+        if (weekCallCount(shifts, surgeon.id, date) >= R.maxCallsPerWeek) continue;
         if (has24HInSameWeek(shifts, surgeon.id, date)) continue;
         if (blockedByEGS(shifts, surgeon.id, date)) continue;
         if (robotBlocksOCN(surgeon, date)) continue;
@@ -762,7 +770,7 @@ export function generateSchedule(
         if (hasBlackout(surgeon, date, 'OCN')) continue;
         if (inRestWindowAfter(shifts, surgeon.id, date)) continue;
         if (wouldViolateRestWindow(shifts, surgeon.id, date)) continue;
-        if (weekCallCount(shifts, surgeon.id, date) >= 2) continue;
+        if (weekCallCount(shifts, surgeon.id, date) >= R.maxCallsPerWeek) continue;
         if (blockedByEGS(shifts, surgeon.id, date)) continue;
         if (robotBlocksOCN(surgeon, date)) continue;
         if (robotBlocksOnDate(surgeon, date, 'OCN')) continue;
@@ -791,7 +799,7 @@ export function generateSchedule(
         if (hasBlackout(surgeon, date, 'OCD')) continue;
         if (inRestWindowAfter(shifts, surgeon.id, date)) continue;
         if (wouldViolateOCDRestWindow(shifts, surgeon.id, date)) continue;
-        if (weekCallCount(shifts, surgeon.id, date) >= 2) continue;
+        if (weekCallCount(shifts, surgeon.id, date) >= R.maxCallsPerWeek) continue;
         if (blockedByEGS(shifts, surgeon.id, date)) continue;
         if (robotBlocksOCD(surgeon, date)) continue;
         if (robotBlocksOnDate(surgeon, date, 'OCD')) continue;
@@ -858,8 +866,8 @@ export function generateSchedule(
           !robotBlocksOCD(s, date) &&
           !robotBlocksOnDate(s, date, 'OCD') &&
           !hasShiftOnDate(shifts, s.id, date) &&
-          (!isWeekend(date) || weekendShiftCount(shifts, s.id, year, month) < 2) &&
-          weekCallCount(shifts, s.id, date) < 2,
+          (!isWeekend(date) || weekendShiftCount(shifts, s.id, year, month) < R.maxWeekendShiftsPerMonth) &&
+          weekCallCount(shifts, s.id, date) < R.maxCallsPerWeek,
         );
         let eligible = baseOCD
           .filter(s => !isWeekend(date) || !hasAdjacentWeekendShift(shifts, s.id, date))
@@ -885,8 +893,8 @@ export function generateSchedule(
           !robotBlocksOCN(s, date) &&
           !robotBlocksOnDate(s, date, 'OCN') &&
           !hasShiftOnDate(shifts, s.id, date) &&
-          (!isWeekend(date) || weekendShiftCount(shifts, s.id, year, month) < 2) &&
-          weekCallCount(shifts, s.id, date) < 2,
+          (!isWeekend(date) || weekendShiftCount(shifts, s.id, year, month) < R.maxWeekendShiftsPerMonth) &&
+          weekCallCount(shifts, s.id, date) < R.maxCallsPerWeek,
         );
         let eligible = baseOCN
           .filter(s => !isWeekend(date) || !hasAdjacentWeekendShift(shifts, s.id, date))

@@ -51,7 +51,7 @@ export function HtmlImporter({ onDone }: { onDone?: () => void } = {}) {
         const result = isHtml
           ? parseHtmlSchedule(content)
           : isKpBlock
-            ? parseKpBlockScheduleCsv(content)
+            ? parseKpBlockScheduleCsv(content, state.rules)
             : parseCsvConstraints(content);
         if (result.surgeons.length === 0) {
           setError('No surgeon constraints found in this file. Make sure it\'s a Kaiser block schedule HTML/CSV or a constraints CSV.');

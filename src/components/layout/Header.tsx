@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ImportButton } from '../controls/ImportButton';
-import { ExportButton } from '../controls/ExportButton';
+import { OverflowMenu } from '../controls/OverflowMenu';
 import { SaveScheduleButton } from '../history/SaveScheduleButton';
 import { HistoryModal } from '../history/HistoryModal';
 import { useSavedSchedules } from '../../hooks/useSavedSchedules';
@@ -18,7 +18,6 @@ export function Header() {
 
         <div className="flex items-center gap-2">
           <ImportButton />
-          <ExportButton />
           <div className="w-px h-5 bg-slate-200" />
           <SaveScheduleButton />
           <button
@@ -33,6 +32,7 @@ export function Header() {
               </span>
             )}
           </button>
+          <OverflowMenu />
         </div>
       </header>
 

@@ -1,5 +1,7 @@
 import Papa from 'papaparse';
 import type { BlackoutDate, RobotBlock } from '../types/surgeon';
+import { addDays } from './dateUtils';
+import { DEFAULT_RULES, type ScheduleRules } from '../constants/scheduleRules';
 
 export interface ParsedSurgeon {
   name: string;
@@ -301,7 +303,10 @@ export function parseCsvConstraints(csv: string): HtmlParseResult {
 //   Row 5+: surgeon rows — col 0 = "Name (ID)", col 1+ = activity cells
 //           continuation rows have col 0 empty
 
-export function parseKpBlockScheduleCsv(csv: string): HtmlParseResult {
+export function parseKpBlockScheduleCsv(
+  csv: string,
+  rules: ScheduleRules = DEFAULT_RULES,
+): HtmlParseResult {
   const { data: rawData } = Papa.parse<string[]>(csv, { header: false, skipEmptyLines: false });
 
   // Find the date header row: first row where multiple cells match a month+day pattern
@@ -331,15 +336,10 @@ export function parseKpBlockScheduleCsv(csv: string): HtmlParseResult {
   const allScheduleDates = [...datesByCol.values()].flat().sort();
   const rangeStart = allScheduleDates[0] ?? '';
 
-  // The 3 calendar days starting from rangeStart that fall inside a rest window
+  // The calendar days starting from rangeStart that fall inside a rest window
   // if the surgeon worked an OCN/24H the night before the range started.
-  function isoAddDays(date: string, n: number): string {
-    const d = new Date(date + 'T12:00:00');
-    d.setDate(d.getDate() + n);
-    return d.toISOString().slice(0, 10);
-  }
   const postcallRestDates = rangeStart
-    ? [rangeStart, isoAddDays(rangeStart, 1), isoAddDays(rangeStart, 2)]
+    ? Array.from({ length: rules.restWindowDays }, (_, i) => addDays(rangeStart, i))
     : [];
 
   const surgeons: ParsedSurgeon[] = [];

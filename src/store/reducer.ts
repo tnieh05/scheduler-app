@@ -7,6 +7,7 @@ import type { Action } from './actions';
 import { runAllRules } from '../engine/validator';
 import { addDays } from '../lib/dateUtils';
 import { defaultPreferences } from '../types/surgeon';
+import { DEFAULT_RULES, type ScheduleRules } from '../constants/scheduleRules';
 
 export interface AppState {
   surgeons: Surgeon[];
@@ -23,6 +24,7 @@ export interface AppState {
   activeMonth: string; // "YYYY-MM" — currently viewed month
   rawScheduleFile: string | null; // raw KP block CSV text, used as export template
   importedRange: DateRange | null; // cumulative range across all imported files
+  rules: ScheduleRules; // tunable scheduling rules, fed to generator/validator/backend
 }
 
 function defaultRange(): DateRange {
@@ -39,21 +41,23 @@ function defaultMonth(): string {
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
 }
 
-const pref = { ...defaultPreferences };
+// Each surgeon gets its own preferences copy — a shared reference would let an
+// in-place mutation on one surgeon silently change all of them.
+const pref = () => ({ ...defaultPreferences });
 
 const DEFAULT_SURGEONS: Surgeon[] = [
-  { id: uuidv4(), name: 'Chen',         type: 'NON_EGS', blackouts: [], robotBlocks: [], preferences: pref },
-  { id: uuidv4(), name: 'Douaiher',     type: 'NON_EGS', blackouts: [], robotBlocks: [], preferences: pref },
-  { id: uuidv4(), name: 'Amog',         type: 'EGS',     blackouts: [], robotBlocks: [], preferences: pref },
-  { id: uuidv4(), name: 'Bell',         type: 'EGS',     blackouts: [], robotBlocks: [], preferences: pref },
-  { id: uuidv4(), name: 'Chakedis',     type: 'EGS',     blackouts: [], robotBlocks: [], preferences: pref },
-  { id: uuidv4(), name: 'Chau',         type: 'EGS',     blackouts: [], robotBlocks: [], preferences: pref },
-  { id: uuidv4(), name: 'Chin',         type: 'EGS',     blackouts: [], robotBlocks: [], preferences: pref },
-  { id: uuidv4(), name: 'Greif',        type: 'EGS',     blackouts: [], robotBlocks: [], preferences: pref },
-  { id: uuidv4(), name: 'Lavi',         type: 'EGS',     blackouts: [], robotBlocks: [], preferences: pref },
-  { id: uuidv4(), name: 'Lee',          type: 'EGS',     blackouts: [], robotBlocks: [], preferences: pref },
-  { id: uuidv4(), name: 'Singh',        type: 'EGS',     blackouts: [], robotBlocks: [], preferences: pref },
-  { id: uuidv4(), name: 'Pool Surgeon', type: 'POOL',    blackouts: [], robotBlocks: [], preferences: pref, availableDates: [] },
+  { id: uuidv4(), name: 'Chen',         type: 'NON_EGS', blackouts: [], robotBlocks: [], preferences: pref() },
+  { id: uuidv4(), name: 'Douaiher',     type: 'NON_EGS', blackouts: [], robotBlocks: [], preferences: pref() },
+  { id: uuidv4(), name: 'Amog',         type: 'EGS',     blackouts: [], robotBlocks: [], preferences: pref() },
+  { id: uuidv4(), name: 'Bell',         type: 'EGS',     blackouts: [], robotBlocks: [], preferences: pref() },
+  { id: uuidv4(), name: 'Chakedis',     type: 'EGS',     blackouts: [], robotBlocks: [], preferences: pref() },
+  { id: uuidv4(), name: 'Chau',         type: 'EGS',     blackouts: [], robotBlocks: [], preferences: pref() },
+  { id: uuidv4(), name: 'Chin',         type: 'EGS',     blackouts: [], robotBlocks: [], preferences: pref() },
+  { id: uuidv4(), name: 'Greif',        type: 'EGS',     blackouts: [], robotBlocks: [], preferences: pref() },
+  { id: uuidv4(), name: 'Lavi',         type: 'EGS',     blackouts: [], robotBlocks: [], preferences: pref() },
+  { id: uuidv4(), name: 'Lee',          type: 'EGS',     blackouts: [], robotBlocks: [], preferences: pref() },
+  { id: uuidv4(), name: 'Singh',        type: 'EGS',     blackouts: [], robotBlocks: [], preferences: pref() },
+  { id: uuidv4(), name: 'Pool Surgeon', type: 'POOL',    blackouts: [], robotBlocks: [], preferences: pref(), availableDates: [] },
 ];
 
 function defaultSchedule(): Schedule {
@@ -75,11 +79,17 @@ export const initialState: AppState = {
   activeMonth: defaultMonth(),
   rawScheduleFile: null,
   importedRange: null,
+  rules: DEFAULT_RULES,
 };
 
-function revalidate(schedule: Schedule, surgeons: Surgeon[], hasGenerated: boolean): Violation[] {
+function revalidate(
+  schedule: Schedule,
+  surgeons: Surgeon[],
+  hasGenerated: boolean,
+  rules: ScheduleRules,
+): Violation[] {
   if (!hasGenerated) return [];
-  return runAllRules(schedule, surgeons);
+  return runAllRules(schedule, surgeons, rules);
 }
 
 const SURGEON_TYPE_ORDER: Record<string, number> = { NON_EGS: 0, EGS: 1, POOL: 2 };
@@ -144,7 +154,7 @@ export function reducer(state: AppState, action: Action): AppState {
         schedule = { ...state.schedule, shifts };
       }
 
-      const violations = schedule ? revalidate(schedule, surgeons, state.hasGenerated) : [];
+      const violations = schedule ? revalidate(schedule, surgeons, state.hasGenerated, state.rules) : [];
       return { ...state, surgeons, schedule, violations };
     }
 
@@ -160,13 +170,13 @@ export function reducer(state: AppState, action: Action): AppState {
         ...state,
         surgeons,
         schedule,
-        violations: schedule ? revalidate(schedule, surgeons, state.hasGenerated) : [],
+        violations: schedule ? revalidate(schedule, surgeons, state.hasGenerated, state.rules) : [],
         selectedSurgeonId: state.selectedSurgeonId === action.payload.id ? null : state.selectedSurgeonId,
       };
     }
 
     case 'SET_SCHEDULE': {
-      const violations = revalidate(action.payload, state.surgeons, true);
+      const violations = revalidate(action.payload, state.surgeons, true, state.rules);
       return { ...state, schedule: action.payload, violations, isGenerating: false, hasGenerated: true };
     }
 
@@ -178,7 +188,7 @@ export function reducer(state: AppState, action: Action): AppState {
           : s,
       );
       const schedule = { ...state.schedule, shifts };
-      return { ...state, schedule, violations: revalidate(schedule, state.surgeons, state.hasGenerated) };
+      return { ...state, schedule, violations: revalidate(schedule, state.surgeons, state.hasGenerated, state.rules) };
     }
 
     case 'SWAP_SHIFTS': {
@@ -192,7 +202,7 @@ export function reducer(state: AppState, action: Action): AppState {
         return s;
       });
       const schedule = { ...state.schedule, shifts };
-      return { ...state, schedule, violations: revalidate(schedule, state.surgeons, state.hasGenerated) };
+      return { ...state, schedule, violations: revalidate(schedule, state.surgeons, state.hasGenerated, state.rules) };
     }
 
     case 'ADD_SHIFT': {
@@ -218,7 +228,7 @@ export function reducer(state: AppState, action: Action): AppState {
       }
 
       const schedule = { ...state.schedule, shifts };
-      return { ...state, surgeons, schedule, violations: revalidate(schedule, surgeons, state.hasGenerated) };
+      return { ...state, surgeons, schedule, violations: revalidate(schedule, surgeons, state.hasGenerated, state.rules) };
     }
 
     case 'DELETE_SHIFT': {
@@ -240,7 +250,7 @@ export function reducer(state: AppState, action: Action): AppState {
       }
 
       const schedule = { ...state.schedule, shifts };
-      return { ...state, surgeons, schedule, violations: revalidate(schedule, surgeons, state.hasGenerated) };
+      return { ...state, surgeons, schedule, violations: revalidate(schedule, surgeons, state.hasGenerated, state.rules) };
     }
 
     case 'SET_RANGE':
@@ -310,7 +320,7 @@ export function reducer(state: AppState, action: Action): AppState {
       );
       const shifts = [...kept, ...egsShifts];
       const schedule = { ...state.schedule, shifts };
-      return { ...state, schedule, violations: revalidate(schedule, state.surgeons, state.hasGenerated) };
+      return { ...state, schedule, violations: revalidate(schedule, state.surgeons, state.hasGenerated, state.rules) };
     }
 
     case 'TOGGLE_PIN_SHIFT': {
@@ -327,19 +337,31 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case 'LOAD_SAVED_SCHEDULE': {
       const { schedule, surgeons, selectedRange } = action.payload;
-      const violations = revalidate(schedule, surgeons, true);
+      // Restore the rules the schedule was saved under, so old schedules
+      // aren't flagged against newer settings. Older saves have no rules field.
+      const rules = { ...DEFAULT_RULES, ...action.payload.rules };
+      const violations = revalidate(schedule, surgeons, true, rules);
       return {
         ...state,
         schedule,
         surgeons,
         selectedRange,
         violations,
+        rules,
         hasGenerated: true,
         activeMonth: selectedRange.start.slice(0, 7),
         selectedSurgeonId: null,
         highlightedShiftId: null,
         highlightedDate: null,
       };
+    }
+
+    case 'SET_RULES': {
+      const rules = action.payload;
+      const violations = state.schedule
+        ? revalidate(state.schedule, state.surgeons, state.hasGenerated, rules)
+        : [];
+      return { ...state, rules, violations };
     }
 
     default:

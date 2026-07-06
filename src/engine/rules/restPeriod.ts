@@ -4,7 +4,7 @@ import type { ValidatorFn } from './ruleTypes';
 
 // Rest rules between on-call shifts and other shifts for the same surgeon.
 //
-// Call → Call (any combination): minimum 3-day rest.
+// Call → Call (any combination): minimum rest window (rules.restWindowDays, default 3).
 //   Rest window start:
 //     OCN / 24H → the day after the shift (ends next morning)
 //     OCD       → the shift date itself (ends same evening)
@@ -15,7 +15,7 @@ import type { ValidatorFn } from './ruleTypes';
 //   OCD / OCN → EGS: no rest requirement.
 //   24H → EGS: 1 day must separate the end of the 24H from the EGS start.
 //     Example: 24H Mon → ends Tue → 1 free day (Tue) → EGS no earlier than Wed.
-export const restPeriodRule: ValidatorFn = (schedule, surgeons) => {
+export const restPeriodRule: ValidatorFn = (schedule, surgeons, rules) => {
   const violations = [];
 
   // Pool surgeons self-manage their schedule; rest-period rules do not apply to them.
@@ -58,15 +58,15 @@ export const restPeriodRule: ValidatorFn = (schedule, surgeons) => {
           severity: 'error' as const,
         });
       } else {
-        // Call → Call: 3-day rule.
-        if (gap < 0 || gap >= 3) continue;
+        // Call → Call: rest-window rule.
+        if (gap < 0 || gap >= rules.restWindowDays) continue;
         violations.push({
           id: uuidv4(),
           ruleId: 'REST_PERIOD' as const,
           shiftIds: [shift.id, other.id],
           surgeonId: shift.surgeonId,
           date: other.date,
-          message: `${surgeon?.name ?? shift.surgeonId}: ${other.kind} on ${other.date} violates 3-day rest after ${shift.kind} on ${shift.date}`,
+          message: `${surgeon?.name ?? shift.surgeonId}: ${other.kind} on ${other.date} violates ${rules.restWindowDays}-day rest after ${shift.kind} on ${shift.date}`,
           severity: 'error' as const,
         });
       }
