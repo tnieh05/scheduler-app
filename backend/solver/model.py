@@ -171,23 +171,32 @@ def solve_schedule(request: GenerateRequest) -> GenerateResponse:
         if key in x:
             model.add(x[key] == 1)
 
-    # ── Coverage: every day must have exactly 1 OCD-cov + 1 OCN-cov
-    # Pool OCN dates: OCN is already satisfied by pool — only enforce OCD == 1.
+    # ── Coverage: every day should have exactly 1 OCD-cov + 1 OCN-cov
+    # Pool OCN dates: OCN is already satisfied by pool — only OCD is needed.
     # Other dates: OCD shift OR 24H covers OCD slot; OCN shift OR 24H covers OCN slot.
+    # Coverage is soft: a heavily-penalized gap variable absorbs slots no surgeon
+    # can legally fill, so pinned shifts (or sparse availability) can never make
+    # the whole model infeasible. Uncovered days surface in the UI as
+    # COVERAGE_GAP validation errors instead of a failed solve.
+    coverage_gaps: List[cp_model.IntVar] = []
     for d in all_dates:
         ocd_cov = (
             [x[(s.id, d, 'OCD')] for s in active_surgeons if (s.id, d, 'OCD') in x]
             + [x[(s.id, d, '24H')] for s in active_surgeons if (s.id, d, '24H') in x]
         )
         if ocd_cov:
-            model.add(sum(ocd_cov) == 1)
+            gap = model.new_bool_var(f'gap_ocd_{d}')
+            model.add(sum(ocd_cov) + gap == 1)
+            coverage_gaps.append(gap)
         if d not in pool_ocn_covered:
             ocn_cov = (
                 [x[(s.id, d, 'OCN')] for s in active_surgeons if (s.id, d, 'OCN') in x]
                 + [x[(s.id, d, '24H')] for s in active_surgeons if (s.id, d, '24H') in x]
             )
             if ocn_cov:
-                model.add(sum(ocn_cov) == 1)
+                gap = model.new_bool_var(f'gap_ocn_{d}')
+                model.add(sum(ocn_cov) + gap == 1)
+                coverage_gaps.append(gap)
 
     # ── At most one call shift per surgeon per day ──────────────────────────
     for s in active_surgeons:
@@ -471,20 +480,22 @@ def solve_schedule(request: GenerateRequest) -> GenerateResponse:
     else:
         range_spread = 0
 
-    # Priority: per-month equity (×100) > cross-range total (×50) >
+    # Priority: coverage gaps (×100000, must dominate everything) >
+    #           per-month equity (×100) > cross-range total (×50) >
     #           OCD/OCN balance (×10) > type preference (×1) > utilization (×3)
     # Utilization: reward giving more calls when it doesn't affect spread.
     # Without this term, the solver is indifferent between a surgeon having
     # 2 vs 6 calls when another surgeon is stuck at the minimum — so low-
     # availability or specialty-preference surgeons (e.g. 24H_ONLY with
     # max24h=3) get left at 2 even when they could reach 6.
+    gap_cost = 100_000 * sum(coverage_gaps) if coverage_gaps else 0
     equity = 100 * sum(spread_terms) if spread_terms else 0
     cross_equity = 50 * range_spread
     balance = 10 * sum(balance_terms) if balance_terms else 0
     pref = sum(pref_terms) if pref_terms else 0
     utilization = -3 * sum(range_tc_vars) if range_tc_vars else 0
-    if spread_terms or range_tc_vars or balance_terms or pref_terms:
-        model.minimize(equity + cross_equity + balance + pref + utilization)
+    if coverage_gaps or spread_terms or range_tc_vars or balance_terms or pref_terms:
+        model.minimize(gap_cost + equity + cross_equity + balance + pref + utilization)
 
     # ── Solve ───────────────────────────────────────────────────────────────
     solver = cp_model.CpSolver()
@@ -494,13 +505,25 @@ def solve_schedule(request: GenerateRequest) -> GenerateResponse:
     status = solver.solve(model)
 
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        # Coverage is soft, so infeasibility can only come from conflicting
+        # hard constraints — in practice, pinned shifts that violate a hard
+        # rule against each other (e.g. two pins inside one rest window).
+        hint = (
+            'Pinned shifts conflict with each other or with a hard rule '
+            '(rest windows, weekly/weekend limits). Try unpinning a shift.'
+            if pinned_calls
+            else 'Check that each day has enough available surgeons and that constraints can be satisfied.'
+        )
         raise ValueError(
-            f'No feasible schedule found (solver status: {solver.status_name(status)}). '
-            'Check that each day has enough available surgeons and that constraints can be satisfied.'
+            f'No feasible schedule found (solver status: {solver.status_name(status)}). {hint}'
         )
 
     # ── Extract solution ────────────────────────────────────────────────────
     result_shifts: List[Shift] = list(pool_shifts) + list(egs_shifts)
+
+    # Keep the pinned flag on shifts the solver was forced to keep, so the pin
+    # badge survives a regenerate and the shift stays locked for the next one.
+    pinned_keys = {(p.surgeon_id, p.date, p.kind.value) for p in pinned_calls}
 
     for s in active_surgeons:
         for d in all_dates:
@@ -521,6 +544,7 @@ def solve_schedule(request: GenerateRequest) -> GenerateResponse:
                     date=d,
                     kind=kind,
                     ancillaries=ancillaries,
+                    pinned=True if (s.id, d, k) in pinned_keys else None,
                 ))
 
     return GenerateResponse(shifts=result_shifts)

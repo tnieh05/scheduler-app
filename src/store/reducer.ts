@@ -18,6 +18,7 @@ export interface AppState {
   highlightedShiftId: string | null;
   highlightedDate: string | null;
   isGenerating: boolean;
+  generateError: string | null; // solver failure message surfaced next to the Generate button
   hasGenerated: boolean; // true after first Generate; gates conflict display
   selectedSurgeonId: string | null;
   parseErrors: string[];
@@ -73,6 +74,7 @@ export const initialState: AppState = {
   highlightedShiftId: null,
   highlightedDate: null,
   isGenerating: false,
+  generateError: null,
   hasGenerated: false,
   selectedSurgeonId: null,
   parseErrors: [],
@@ -177,7 +179,7 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case 'SET_SCHEDULE': {
       const violations = revalidate(action.payload, state.surgeons, true, state.rules);
-      return { ...state, schedule: action.payload, violations, isGenerating: false, hasGenerated: true };
+      return { ...state, schedule: action.payload, violations, isGenerating: false, generateError: null, hasGenerated: true };
     }
 
     case 'MOVE_SHIFT': {
@@ -265,6 +267,16 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'SET_IS_GENERATING':
       return { ...state, isGenerating: action.payload };
 
+    // Setting an error ends the run; clearing one (payload null, done at the
+    // start of a run) must not touch isGenerating or the button's busy state
+    // would be cancelled immediately.
+    case 'SET_GENERATE_ERROR':
+      return {
+        ...state,
+        generateError: action.payload,
+        isGenerating: action.payload === null ? state.isGenerating : false,
+      };
+
     case 'SET_PARSE_ERRORS':
       return { ...state, parseErrors: action.payload };
 
@@ -306,7 +318,7 @@ export function reducer(state: AppState, action: Action): AppState {
       const schedule = state.schedule
         ? { ...state.schedule, shifts: [] }
         : { range: state.selectedRange, shifts: [] };
-      return { ...state, surgeons, schedule, violations: [], hasGenerated: false, selectedSurgeonId: null, importedRange: null };
+      return { ...state, surgeons, schedule, violations: [], generateError: null, hasGenerated: false, selectedSurgeonId: null, importedRange: null };
     }
 
     case 'SELECT_SURGEON':

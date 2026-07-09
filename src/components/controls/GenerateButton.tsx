@@ -10,6 +10,7 @@ export function GenerateButton() {
   async function handleGenerate() {
     if (surgeons.length === 0 || isGenerating) return;
     dispatch({ type: 'SET_IS_GENERATING', payload: true });
+    dispatch({ type: 'SET_GENERATE_ERROR', payload: null });
 
     try {
       const response = await fetch(`${API_URL}/generate`, {
@@ -22,6 +23,19 @@ export function GenerateButton() {
           rules: state.rules,
         }),
       });
+
+      // 422 = the solver understood the request and proved it unsolvable
+      // (e.g. pinned shifts that conflict with a hard rule). The local
+      // generator would hit the same wall, so surface the message instead
+      // of silently falling back and appearing to do nothing.
+      if (response.status === 422) {
+        const err = await response.json().catch(() => ({ detail: response.statusText }));
+        dispatch({
+          type: 'SET_GENERATE_ERROR',
+          payload: typeof err.detail === 'string' ? err.detail : 'The solver could not find a valid schedule.',
+        });
+        return;
+      }
 
       if (!response.ok) {
         const err = await response.json().catch(() => ({ detail: response.statusText }));
@@ -36,9 +50,11 @@ export function GenerateButton() {
         const next = generateSchedule(surgeons, selectedRange, schedule ?? undefined, state.rules);
         dispatch({ type: 'SET_SCHEDULE', payload: next });
       } catch (fallbackErr) {
-        // Both engines failed — reset the flag so the button doesn't stay stuck
         console.error('Local generator also failed:', fallbackErr);
-        dispatch({ type: 'SET_IS_GENERATING', payload: false });
+        dispatch({
+          type: 'SET_GENERATE_ERROR',
+          payload: fallbackErr instanceof Error ? fallbackErr.message : 'Schedule generation failed.',
+        });
       }
     }
   }

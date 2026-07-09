@@ -17,6 +17,7 @@ export type Action =
   | { type: 'SET_ACTIVE_TAB'; payload: 'manual' | 'import' }
   | { type: 'SET_HIGHLIGHTED_SHIFT'; payload: { shiftId: string | null; date: string | null } }
   | { type: 'SET_IS_GENERATING'; payload: boolean }
+  | { type: 'SET_GENERATE_ERROR'; payload: string | null }
   | { type: 'SET_PARSE_ERRORS'; payload: string[] }
   | { type: 'SET_ACTIVE_MONTH'; payload: string } // "YYYY-MM"
   | { type: 'SET_SURGEONS'; payload: Surgeon[] } // replace entire roster
